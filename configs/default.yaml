@@ -1,0 +1,131 @@
+# Default configuration. Every value here can be overridden by
+# configs/<environment>.yaml or by environment variables (see .env.example).
+
+app_name: Semantic Search Engine
+version: "0.1.0"
+environment: development
+log_level: INFO
+log_format: console
+log_queries: false
+cache_backend: memory
+
+# small = 2k docs (dev/CI) | medium = 50k | full = 200k
+corpus_size: small
+
+data:
+  data_dir: data
+  dataset_name: wikimedia/wikipedia
+  dataset_config: "20231101.en"
+  min_text_length: 50
+  max_text_length: 20000
+  title_prefix_max_length: 120
+
+embedding:
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+  device: auto
+  batch_size: 64
+  max_seq_length: 256
+  normalize: true
+
+faiss:
+  index_type: flat_ip
+  hnsw_m: 32
+  hnsw_ef_construction: 200
+  hnsw_ef_search: 64
+  ivf_nlist: 1024
+  ivf_nprobe: 16
+
+bm25:
+  k1: 1.5
+  b: 0.75
+  min_token_length: 2
+  max_token_length: 40
+  use_stemming: true
+  stopwords: en
+
+hybrid:
+  rrf_k: 60
+  default_method: hybrid
+  candidate_pool: 100
+
+query:
+  # Master switch. With enabled: false the processor returns immediately and
+  # SearchService.search degrades to exactly SearchService.search_raw.
+  enabled: true
+  # Spell correction is conservative by design and OFF by default. Measured
+  # against the 300-doc corpus, it fixes real typos ("machne" -> "machine") and
+  # also mangles out-of-corpus real words ("tectonics" -> "tectonic",
+  # "turbine" -> "turin", "virus" -> "virtues"). No similarity threshold and no
+  # frequency list stops that -- see BUILD_STATUS.md, Phase 8. Turn it on when
+  # your users mistype; leave it off if they search technical vocabulary the
+  # corpus does not contain.
+  spell_check: false
+  min_correction_score: 80.0
+  min_edit_distance: 2
+  min_candidate_df: 3
+  # Recorded always, applied only when true. There is no labelled evaluation
+  # data, so the expansion is not allowed to change what is retrieved by
+  # default -- only what the explainability panel can show.
+  synonym_expansion: false
+  max_length: 512
+  preserve_proper_nouns: true
+  # Refuse to correct a stopword in either direction. Measured on the 300-doc
+  # corpus: without this, "and" was rewritten to "andy" and "are" to "acre".
+  protect_stopwords: true
+
+search:
+  default_top_k: 10
+  max_top_k: 100
+  snippet_length: 320
+
+app:
+  # The application search service (Phase 9). These deliberately mirror
+  # search.default_top_k / search.max_top_k / query.max_length rather than
+  # introducing a fourth copy of each knob with a different name. The app layer
+  # adds no retrieval behaviour: it validates the request, chooses the ON/OFF
+  # path, maps results onto the public contract, and reports metadata.
+  default_top_k: 10
+  # top_k above this is CLAMPED, not rejected -- a caller asking for 500 results
+  # from a 300-document corpus is asking a reasonable question. The clamp is
+  # visible: metadata.requested_top_k records the pre-clamp number.
+  max_top_k: 100
+  # The default for the three-way per-request choice. A request may still say
+  # True or False explicitly, which is what makes the ON/OFF experiment a
+  # runtime flag rather than two deployments.
+  query_processing_enabled: true
+  max_query_chars: 512
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 1
+  cors_origins:
+    - "*"
+  rate_limit_per_minute: 60
+  rate_limit_enabled: true
+  cache_size: 512
+  cache_ttl_seconds: 300
+  max_payload_bytes: 262144
+  expose_stack_traces: false
+  log_queries: false
+  docs_url: /docs
+  redoc_url: /redoc
+
+evaluation:
+  # The retrieval-quality evaluation harness (Phase 10). Nothing in the search
+  # path reads this section -- it configures how the evaluation runs, not how
+  # retrieval behaves. Changing EVAL_DEPTH does not change what a user sees.
+  #
+  # Every cutoff metric (P@1, P@5, R@10, NDCG@10) is computed from ONE retrieval
+  # run per (system, query) at this depth. Retrieving separately per cutoff
+  # would mean P@5 and R@10 came from different runs.
+  depth: 50
+  # Bootstrap resamples. 1,000 gives visibly unstable interval endpoints;
+  # 10,000 makes Monte-Carlo error small next to the interval's own width.
+  resamples: 10000
+  # Fixed so two runs of the same evaluation produce identical intervals.
+  seed: 20250930
+  # The spell-correction arm is opt-in. Turning it on here runs the arm as a
+  # LABELLED EXPERIMENT and does NOT change query.spell_check for production:
+  # the arm builds its own service from a copied settings object.
+  run_spell_experiment: false

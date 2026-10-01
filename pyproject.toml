@@ -1,0 +1,130 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic-search-engine"
+version = "0.1.0"
+description = "Production-grade hybrid semantic search engine over Wikipedia (BM25 + Sentence-BERT + FAISS + RRF)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Semantic Search Engine Contributors" }]
+keywords = ["search", "bm25", "faiss", "sentence-transformers", "rrf", "information-retrieval"]
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "PyYAML>=6.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+    "faiss-cpu>=1.7.4",
+    "sentence-transformers>=2.7",
+    "torch>=2.0",
+    "datasets>=2.18",
+    "huggingface_hub>=0.20",
+    "tqdm>=4.66",
+    "rapidfuzz>=3.6",
+    "streamlit>=1.30",
+    "plotly>=5.18",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+    "orjson>=3.9",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+gpu = ["faiss-gpu-cu12"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "black>=24.0",
+    "mypy>=1.9",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+sse = "semantic_search.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+semantic_search = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "app", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "N", "ANN", "RUF"]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "ANN401", # allow `Any` where a dynamic payload is genuinely required
+    "B008",   # FastAPI dependency injection relies on calls in defaults
+    "RUF001", # ambiguous unicode in strings
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "S101", "N806"]
+"scripts/*" = ["ANN"]
+# N999: Streamlit names the entry point after the page's title in the sidebar,
+# so a capitalised module name is the framework's convention rather than a
+# Python one. `streamlit run app/Home.py` is the documented command and it
+# requires the file to be called Home.py.
+"app/Home.py" = ["N999"]
+"app/*" = ["ANN", "E402"]
+"notebooks/*" = ["ANN", "E402", "F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["semantic_search"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src/semantic_search"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["faiss.*", "sentence_transformers.*", "datasets.*", "torch.*", "sklearn.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: tests that build real indexes or download models",
+    "performance: latency/throughput benchmarks",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/semantic_search"]
+branch = true
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

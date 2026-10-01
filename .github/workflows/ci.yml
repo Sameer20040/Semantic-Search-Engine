@@ -1,0 +1,108 @@
+name: CI
+
+# No Docker. No containers. Plain Python environments on the runner, the same
+# way the project is deployed.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check src tests scripts app
+
+      - name: Black
+        run: black --check src tests scripts app
+
+      - name: Mypy
+        run: mypy src
+
+      # The real 300 MB Sentence-BERT model is never loaded here. Tests use a
+      # blake2b fake encoder (see tests/conftest.py), which is why the suite
+      # runs in ~40s rather than downloading a model.
+      - name: Pytest
+        run: pytest -m "not slow" --cov=semantic_search --cov-report=term-missing
+
+  package:
+    name: Package builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Verify the declared entry point resolves
+        run: |
+          pip install dist/*.whl
+          sse --help
+          sse version
+
+  smoke:
+    name: CLI smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Installs the package, then drives the CLI end to end over a small
+      # synthetic corpus. Real indexes require the 300 MB model, which is not
+      # fetched here; what this proves is that the entry point, config
+      # loading, validation and the search path are all wired correctly.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: CLI surface
+        run: |
+          sse --help
+          sse version
+          sse config
+          sse validate --files-only
+
+      - name: The servers import and expose their routes
+        run: |
+          python - <<'PY'
+          from semantic_search.api.app import create_app
+          app = create_app(load_artifacts=False)
+          # Read the OpenAPI schema, not app.routes: FastAPI wraps routers that
+          # were passed to include_router, so their paths are not top-level
+          # entries on the route list.
+          paths = sorted(app.openapi()["paths"])
+          required = ["/health", "/health/live", "/health/ready", "/search", "/search/explain", "/stats"]
+          missing = [p for p in required if p not in paths]
+          assert not missing, f"missing routes: {missing}"
+          print("routes ok:", paths)
+          PY

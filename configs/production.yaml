@@ -1,0 +1,56 @@
+# Production: large corpus, JSON logs, strict safety defaults.
+# Secrets must come from environment variables, never from this file.
+
+environment: production
+log_level: INFO
+log_format: json
+log_queries: false          # never log user query text on a public deployment
+corpus_size: full
+
+data:
+  min_text_length: 50
+  max_text_length: 20000
+
+embedding:
+  batch_size: 128
+  normalize: true
+
+faiss:
+  # flat_ip is exact and fastest on CPU for <= ~500k x 384 vectors.
+  # Switch to hnsw/ivf_flat for larger corpora (see docs/benchmarks.md).
+  index_type: flat_ip
+
+hybrid:
+  rrf_k: 60
+  candidate_pool: 100
+
+query:
+  spell_check: true
+  synonym_expansion: true
+
+search:
+  default_top_k: 10
+  max_top_k: 50
+
+api:
+  workers: 2
+  # CORS is DISABLED by default in production, which is the correct setting when
+  # the UI is served from the same origin as the API. The server refuses to
+  # start if this list contains "*" while environment is "production", so a
+  # wildcard cannot be shipped here by accident and then discovered in a
+  # security review.
+  #
+  # To serve the Streamlit UI from a different origin, name that origin
+  # explicitly, e.g.
+  #   cors_origins:
+  #     - https://my-app.streamlit.app
+  cors_origins: []
+  rate_limit_per_minute: 60
+  rate_limit_enabled: true
+  cache_size: 1024
+  cache_ttl_seconds: 300
+  max_payload_bytes: 65536
+  expose_stack_traces: false
+  log_queries: false
+  docs_url: /docs
+  redoc_url: /redoc
