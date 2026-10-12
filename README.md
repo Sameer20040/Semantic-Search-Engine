@@ -282,7 +282,7 @@ black --check src tests scripts app
 mypy src
 ```
 
-Current state: **979 passed, 6 skipped.**
+Current state: **893 test functions (~979 tests by pytest collection), 6 skipped (current suite).**
 
 Index files, the corpus, and the raw Wikipedia dump are gitignored — a clone
 starts empty and rebuilds them with `scripts/build_index.py`.
